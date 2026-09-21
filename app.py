@@ -141,7 +141,7 @@ def update(slug):
     db.commit()
     msg = f"Destino de '{slug}' actualizado."
     if load_config()["mode"] == "static":
-        msg += " Recuerda exportar y publicar para que se aplique."
+        msg += " Pulsa \"Publicar cambios\" para aplicarlo."
     flash(msg, "ok")
     return redirect(url_for("index"))
 
@@ -173,8 +173,29 @@ def settings():
 @local_only
 def export():
     n = export_static()
-    flash(f"Exportados {n} redirects en /docs. Haz commit + push para publicarlos.", "ok")
+    ok, detail = publish_static()
+    if ok:
+        flash(f"Publicados {n} QRs. Los cambios se ven en 1-2 minutos.", "ok")
+    else:
+        flash(f"Exportados {n} QRs en /docs, pero falló la publicación: {detail}", "error")
     return redirect(url_for("index"))
+
+
+def publish_static():
+    """git add/commit/push de /docs. Devuelve (ok, detalle)."""
+    import subprocess
+
+    def git(*args):
+        return subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True)
+
+    git("add", "docs")
+    if git("diff", "--cached", "--quiet").returncode == 0:
+        return True, "sin cambios"
+    commit = git("commit", "-m", "Actualizar redirects QR")
+    if commit.returncode != 0:
+        return False, (commit.stderr or commit.stdout).strip()
+    push = git("push")
+    return push.returncode == 0, push.stderr.strip()
 
 
 @app.route("/qr/<slug>.<fmt>")

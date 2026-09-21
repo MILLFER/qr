@@ -93,8 +93,8 @@
     </form>
     {% if cfg.mode == 'static' %}
     <form method="post" action="{{ url_for('export') }}" style="margin-top:10px">
-      <button class="primary">Exportar a /docs</button>
-      <span class="meta">Después: commit + push para que los cambios de destino se apliquen.</span>
+      <button class="primary">Publicar cambios</button>
+      <span class="meta">Pulsa después de crear, editar o borrar QRs.</span>
     </form>
     {% endif %}
     <p class="meta">Define la URL base <b>antes</b> de imprimir QRs: si la cambias después, los QR impresos dejan de apuntar aquí.</p>

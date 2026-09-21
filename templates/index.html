@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QR Generator</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --ink:#1c1f24; --mute:#6b7280; --line:#e3e6ea; --acc:#2f5bea; --bad:#c62828; --ok:#1b7f3b; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.45 system-ui, sans-serif; background:var(--bg); color:var(--ink); }
+  main { max-width:1000px; margin:0 auto; padding:24px 16px 60px; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  h2 { font-size:15px; margin:0 0 12px; }
+  .sub { color:var(--mute); margin:0 0 20px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; margin-bottom:16px; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; align-items:end; }
+  label { display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--mute); flex:1 1 160px; }
+  input, select { font:inherit; padding:7px 9px; border:1px solid var(--line); border-radius:6px; color:var(--ink); background:#fff; width:100%; }
+  button, .btn { font:inherit; padding:7px 12px; border-radius:6px; border:1px solid var(--line); background:#fff; cursor:pointer; text-decoration:none; color:var(--ink); white-space:nowrap; }
+  .primary { background:var(--acc); border-color:var(--acc); color:#fff; }
+  .danger { color:var(--bad); }
+  .flash { padding:9px 12px; border-radius:6px; margin-bottom:12px; }
+  .flash.ok { background:#e7f5ec; color:var(--ok); }
+  .flash.error { background:#fdecea; color:var(--bad); }
+  .code { display:grid; grid-template-columns:140px 1fr; gap:16px; }
+  .code img { width:140px; height:140px; border:1px solid var(--line); border-radius:6px; background:#fff; }
+  .meta { color:var(--mute); font-size:12px; margin:4px 0 10px; word-break:break-all; }
+  .meta b { color:var(--ink); font-weight:600; }
+  .actions { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+  .empty { color:var(--mute); text-align:center; padding:24px; }
+  @media (max-width:560px) { .code { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>QR Generator</h1>
+  <p class="sub">QRs dinámicos: el QR apunta a <code>{{ cfg.base_url }}/r/&lt;slug&gt;</code> y tú cambias el destino cuando quieras.</p>
+
+  {% for cat, msg in get_flashed_messages(with_categories=true) %}
+    <div class="flash {{ cat }}">{{ msg }}</div>
+  {% endfor %}
+
+  <section class="card">
+    <h2>Nuevo QR</h2>
+    <form method="post" action="{{ url_for('create') }}" class="row">
+      <label>Slug (fijo, va en el QR)<input name="slug" placeholder="menu-restaurante" required pattern="[a-z0-9][a-z0-9\-]{0,62}"></label>
+      <label>Nombre<input name="name" placeholder="Carta del restaurante"></label>
+      <label style="flex-basis:280px">URL de destino<input name="target" placeholder="https://..." required></label>
+      <button class="primary">Crear</button>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2>Mis QRs ({{ codes|length }})</h2>
+    {% if not codes %}<div class="empty">Aún no hay QRs.</div>{% endif %}
+    {% for c in codes %}
+      <div class="code card" style="margin-bottom:10px">
+        <img src="{{ url_for('qr_image', slug=c.slug, fmt='png') }}?v={{ cfg.base_url|urlencode }}" alt="QR {{ c.slug }}">
+        <div>
+          <form method="post" action="{{ url_for('update', slug=c.slug) }}" class="row">
+            <label>Nombre<input name="name" value="{{ c.name }}"></label>
+            <label style="flex-basis:280px">Destino<input name="target" value="{{ c.target }}" required></label>
+            <button class="primary">Guardar</button>
+          </form>
+          <div class="meta">
+            QR → <b>{{ public_url(c.slug) }}</b><br>
+            {% if cfg.mode == 'server' %}Escaneos: <b>{{ c.scans }}</b> · {% endif %}Actualizado: {{ c.updated_at.replace('T', ' ') }}
+          </div>
+          <div class="actions">
+            <a class="btn" href="{{ url_for('qr_image', slug=c.slug, fmt='png') }}?download=1&size=20">PNG</a>
+            <a class="btn" href="{{ url_for('qr_image', slug=c.slug, fmt='svg') }}?download=1">SVG</a>
+            <a class="btn" href="{{ c.target }}" target="_blank" rel="noopener">Abrir destino</a>
+            <form method="post" action="{{ url_for('delete', slug=c.slug) }}" onsubmit="return confirm('¿Eliminar {{ c.slug }}? El QR impreso dejará de funcionar.')">
+              <button class="danger">Eliminar</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    {% endfor %}
+  </section>
+
+  <section class="card">
+    <h2>Publicación</h2>
+    <form method="post" action="{{ url_for('settings') }}" class="row">
+      <label style="flex-basis:300px">URL base pública<input name="base_url" value="{{ cfg.base_url }}"></label>
+      <label>Modo
+        <select name="mode">
+          <option value="server" {{ 'selected' if cfg.mode == 'server' }}>Servidor (túnel)</option>
+          <option value="static" {{ 'selected' if cfg.mode == 'static' }}>Estático (GitHub Pages)</option>
+        </select>
+      </label>
+      <button>Guardar</button>
+    </form>
+    {% if cfg.mode == 'static' %}
+    <form method="post" action="{{ url_for('export') }}" style="margin-top:10px">
+      <button class="primary">Exportar a /docs</button>
+      <span class="meta">Después: commit + push para que los cambios de destino se apliquen.</span>
+    </form>
+    {% endif %}
+    <p class="meta">Define la URL base <b>antes</b> de imprimir QRs: si la cambias después, los QR impresos dejan de apuntar aquí.</p>
+  </section>
+</main>
+</body>
+</html>
